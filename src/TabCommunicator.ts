@@ -14,7 +14,34 @@ import {
 } from './errors.js';
 
 /**
- * TabCommunicator - Inter-tab/window communication using BroadcastChannel API
+ * TabCommunicator - A lightweight framework for inter-tab communication
+ * 
+ * This class provides a simple and reliable way to communicate between different
+ * browser tabs, windows, and iframes using the BroadcastChannel API. It handles
+ * peer discovery, message routing, and automatic cleanup of disconnected peers.
+ * 
+ * @example
+ * ```javascript
+ * const communicator = new TabCommunicator({
+ *   channelName: 'my-app',
+ *   registrationId: 'user-dashboard',
+ *   onMessage: (message) => {
+ *     console.log('Received:', message);
+ *   },
+ *   onPeerConnected: (peerId) => {
+ *     console.log('Peer connected:', peerId);
+ *   },
+ *   onPeerDisconnected: (peerId) => {
+ *     console.log('Peer disconnected:', peerId);
+ *   }
+ * });
+ * 
+ * // Send message to specific peer
+ * communicator.send('peer-id', 'chat', { text: 'Hello!' });
+ * 
+ * // Broadcast to all peers
+ * communicator.send(null, 'update', { data: { count: 42 } });
+ * ```
  */
 export class TabCommunicator {
   private readonly _id: string;
@@ -34,6 +61,23 @@ export class TabCommunicator {
   private readonly _onPeerDisconnected?: (peerId: string) => void;
   private readonly _onError?: (error: Error) => void;
 
+  /**
+   * Creates a new TabCommunicator instance
+   * 
+   * @param options - Configuration options for the communicator
+   * @throws {BroadcastChannelUnsupportedError} When BroadcastChannel API is not supported
+   * 
+   * @example
+   * ```javascript
+   * const communicator = new TabCommunicator({
+   *   channelName: 'chat-app',
+   *   registrationId: 'user-123',
+   *   onMessage: (message) => {
+   *     console.log('Message from', message.from, ':', message.payload);
+   *   }
+   * });
+   * ```
+   */
   constructor(options: TabCommunicatorOptions) {
     // Check BroadcastChannel support
     if (typeof BroadcastChannel === 'undefined') {
@@ -66,6 +110,15 @@ export class TabCommunicator {
 
   /**
    * Internal ID of this instance (automatically generated)
+   * 
+   * This is a unique identifier generated for each TabCommunicator instance.
+   * It's used internally for peer management and can be used for debugging.
+   * 
+   * @example
+   * ```javascript
+   * console.log('My internal ID:', communicator.id);
+   * // Output: "My internal ID: abc123-def456-ghi789"
+   * ```
    */
   get id(): string {
     return this._id;
@@ -73,6 +126,21 @@ export class TabCommunicator {
 
   /**
    * Registration ID of this instance (user-provided)
+   * 
+   * This is the optional user-provided identifier. If not provided during
+   * construction, this will be null. Registration IDs are preferred over
+   * internal IDs for user-facing operations.
+   * 
+   * @example
+   * ```javascript
+   * const communicator = new TabCommunicator({
+   *   channelName: 'my-app',
+   *   registrationId: 'user-dashboard'
+   * });
+   * 
+   * console.log('My registration ID:', communicator.registrationId);
+   * // Output: "My registration ID: user-dashboard"
+   * ```
    */
   get registrationId(): string | null {
     return this._registrationId;
@@ -80,6 +148,15 @@ export class TabCommunicator {
 
   /**
    * Set of active peer IDs (excluding self)
+   * 
+   * Returns a Set containing the IDs of all currently connected peers.
+   * Registration IDs are preferred over internal IDs when available.
+   * 
+   * @example
+   * ```javascript
+   * console.log('Active peers:', Array.from(communicator.peers));
+   * // Output: "Active peers: ['user-1', 'user-2', 'abc123-def456']"
+   * ```
    */
   get peers(): Set<string> {
     const peerIds = new Set<string>();
@@ -92,29 +169,68 @@ export class TabCommunicator {
 
   /**
    * Name of the communication channel
+   * 
+   * This is the channel name used for communication between peers.
+   * All instances with the same channel name can communicate with each other.
+   * 
+   * @example
+   * ```javascript
+   * console.log('Channel name:', communicator.channelName);
+   * // Output: "Channel name: my-app"
+   * ```
    */
   get channelName(): string {
     return this._channelName;
   }
 
   /**
-   * Connection status
+   * Connection status of the communicator
+   * 
+   * Returns true if the communicator is connected and ready to send/receive messages.
+   * 
+   * @example
+   * ```javascript
+   * if (communicator.isConnected) {
+   *   communicator.send(null, 'ready', { status: 'online' });
+   * }
+   * ```
    */
   get isConnected(): boolean {
     return this._isConnected;
   }
 
   /**
-   * Send a message to a specific peer or broadcast to all
+   * Sends a message to a specific peer or broadcasts to all peers
+   * 
+   * @param targetId - Recipient ID (internal ID or registration ID), or null for broadcast
+   * @param type - Message type identifier
+   * @param payload - JSON-serializable data to send
+   * @throws {CommunicatorClosedError} When the communicator is closed
+   * @throws {PeerNotFoundError} When targetId is specified but peer not found
+   * @throws {InvalidMessageError} When message data is invalid
+   * 
+   * @example
+   * ```javascript
+   * // Send to specific peer using registration ID
+   * communicator.send('user-123', 'chat', { text: 'Hello!' });
+   * 
+   * // Send to specific peer using internal ID
+   * communicator.send('abc123-def456', 'notification', { title: 'Update' });
+   * 
+   * // Broadcast to all peers
+   * communicator.send(null, 'update', { data: { count: 42 } });
+   * 
+   * // Send with complex payload
+   * communicator.send('user-456', 'state-change', {
+   *   action: 'UPDATE_USER',
+   *   data: { name: 'John', age: 30 },
+   *   timestamp: Date.now()
+   * });
+   * ```
    */
   send(targetId: string | null, type: string, payload: any): void {
     this._ensureConnected();
     this._validateMessage(type, payload);
-
-    // If targetId is provided, validate it exists
-    if (targetId !== null && !this._findPeerByAnyId(targetId)) {
-      throw new PeerNotFoundError(targetId);
-    }
 
     const message: Message = {
       from: this._registrationId || this._id,
@@ -124,11 +240,42 @@ export class TabCommunicator {
       timestamp: Date.now()
     };
 
+    // If sending to specific peer, verify they exist
+    if (targetId && !this._findPeerByAnyId(targetId)) {
+      throw new PeerNotFoundError(`Peer '${targetId}' not found`);
+    }
+
     this._channel.postMessage(message);
   }
 
   /**
-   * Register an event listener
+   * Registers an event listener
+   * 
+   * @param eventType - The type of event to listen for
+   * @param callback - The function to call when the event occurs
+   * 
+   * @example
+   * ```javascript
+   * // Listen for all messages
+   * communicator.on('message', (message) => {
+   *   console.log(`${message.from}: ${message.payload.text}`);
+   * });
+   * 
+   * // Listen for peer connections
+   * communicator.on('peerConnected', (peerId) => {
+   *   console.log('New peer connected:', peerId);
+   * });
+   * 
+   * // Listen for peer disconnections
+   * communicator.on('peerDisconnected', (peerId) => {
+   *   console.log('Peer disconnected:', peerId);
+   * });
+   * 
+   * // Listen for errors
+   * communicator.on('error', (error) => {
+   *   console.error('Communication error:', error);
+   * });
+   * ```
    */
   on(eventType: EventType, callback: EventCallback): void {
     if (!this._eventListeners.has(eventType)) {
@@ -138,20 +285,48 @@ export class TabCommunicator {
   }
 
   /**
-   * Remove an event listener
+   * Removes an event listener
+   * 
+   * @param eventType - The type of event to stop listening for
+   * @param callback - The function to remove from the event listeners
+   * 
+   * @example
+   * ```javascript
+   * const messageHandler = (message) => console.log(message);
+   * 
+   * // Add listener
+   * communicator.on('message', messageHandler);
+   * 
+   * // Remove listener
+   * communicator.off('message', messageHandler);
+   * ```
    */
   off(eventType: EventType, callback: EventCallback): void {
     const listeners = this._eventListeners.get(eventType);
     if (listeners) {
       listeners.delete(callback);
-      if (listeners.size === 0) {
-        this._eventListeners.delete(eventType);
-      }
     }
   }
 
   /**
-   * Close the communicator and clean up resources
+   * Disconnects the instance from the channel and cleans up resources
+   * 
+   * This method should be called when you're done with the communicator
+   * to prevent memory leaks and ensure proper cleanup.
+   * 
+   * @example
+   * ```javascript
+   * // Clean up when component unmounts (React example)
+   * useEffect(() => {
+   *   const communicator = new TabCommunicator({
+   *     channelName: 'my-app'
+   *   });
+   * 
+   *   return () => {
+   *     communicator.close();
+   *   };
+   * }, []);
+   * ```
    */
   close(): void {
     if (!this._isConnected) {
@@ -164,26 +339,20 @@ export class TabCommunicator {
       registrationId: this._registrationId
     });
 
-    // Clean up
-    this._isConnected = false;
-    this._channel.close();
-    this._peers.clear();
-    this._eventListeners.clear();
-
+    // Clear intervals
     if (this._discoveryTimeout) {
       clearTimeout(this._discoveryTimeout);
-      this._discoveryTimeout = null;
     }
-
     if (this._peerVerificationInterval) {
       clearInterval(this._peerVerificationInterval);
-      this._peerVerificationInterval = null;
     }
-
     if (this._heartbeatInterval) {
       clearInterval(this._heartbeatInterval);
-      this._heartbeatInterval = null;
     }
+
+    // Close channel
+    this._channel.close();
+    this._isConnected = false;
   }
 
   /**
