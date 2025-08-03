@@ -1,0 +1,16 @@
+{
+  "entryPoints": ["src/index.ts"],
+  "out": "docs/api",
+  "theme": "default",
+  "name": "Tab Whisper API",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "includeVersion": true,
+  "categorizeByGroup": true,
+  "categoryOrder": ["Classes", "Interfaces", "Types", "Enums", "*"],
+  "readme": "none",
+  "defaultCategory": "Other",
+  "hideGenerator": true,
+  "sort": ["source-order"]
+} 
