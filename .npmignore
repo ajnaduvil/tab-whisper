@@ -1,0 +1,30 @@
+# Source files
+src/
+
+# Configuration files
+tsconfig.json
+rollup.config.js
+
+# Development files
+.gitignore
+.vscode/
+.idea/
+
+# Documentation (keep README.md)
+SPECIFICATION.md
+
+# Logs
+*.log
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Coverage
+coverage/
+.nyc_output
