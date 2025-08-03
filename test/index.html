@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tab Talk Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .messages-log {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 3px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        button {
+            margin: 5px;
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tab Talk Test</h1>
+    
+    <div class="test-section">
+        <h3>Connection Status</h3>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <div>
+            <strong>My ID:</strong> <span id="myId">-</span><br>
+            <strong>Registration ID:</strong> <span id="myRegId">-</span><br>
+            <strong>Active Peers:</strong> <span id="peerCount">0</span>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Send Messages</h3>
+        <div>
+            <label>Message Type:</label>
+            <input type="text" id="messageType" value="test" style="margin: 0 10px;">
+            <label>Payload:</label>
+            <input type="text" id="messagePayload" value="Hello from tab!" style="margin: 0 10px;">
+        </div>
+        <div style="margin-top: 10px;">
+            <button onclick="sendBroadcast()">Send Broadcast</button>
+            <button onclick="sendToPeer()">Send to Peer</button>
+            <select id="targetPeer" style="margin-left: 10px; padding: 5px;">
+                <option value="">Select a peer...</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Active Peers</h3>
+        <div id="peersList" class="log"></div>
+        <button onclick="refreshPeers()">Refresh Peers</button>
+    </div>
+
+    <div class="test-section">
+        <h3>Messages</h3>
+        <div id="messagesList" class="messages-log"></div>
+        <button onclick="clearMessages()">Clear Messages</button>
+    </div>
+
+    <div class="test-section">
+        <h3>Event Log</h3>
+        <div id="log" class="log"></div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
+
+    <div class="test-section">
+        <h3>Instructions</h3>
+        <ol>
+            <li>Open this page in multiple browser tabs</li>
+            <li>Watch the connection status and peer count update</li>
+            <li>Try sending broadcast messages and see them appear in other tabs</li>
+            <li>Try sending direct messages using peer IDs</li>
+            <li>Close tabs to see peer disconnection events</li>
+        </ol>
+    </div>
+
+    <script type="module">
+        import { TabCommunicator } from '../dist/index.esm.js';
+
+        let communicator;
+        const logElement = document.getElementById('log');
+        const statusElement = document.getElementById('status');
+        const myIdElement = document.getElementById('myId');
+        const myRegIdElement = document.getElementById('myRegId');
+        const peerCountElement = document.getElementById('peerCount');
+        const peersListElement = document.getElementById('peersList');
+        const messagesListElement = document.getElementById('messagesList');
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logElement.innerHTML += `[${timestamp}] ${message}\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            logElement.innerHTML = '';
+        }
+
+        function clearMessages() {
+            messagesListElement.innerHTML = '';
+        }
+
+        function refreshPeers() {
+            updatePeersList();
+        }
+
+        function updateStatus() {
+            if (communicator && communicator.isConnected) {
+                statusElement.textContent = 'Connected';
+                statusElement.className = 'status connected';
+                myIdElement.textContent = communicator.id;
+                myRegIdElement.textContent = communicator.registrationId || 'None';
+                peerCountElement.textContent = communicator.peers.size;
+                updatePeersList();
+            } else {
+                statusElement.textContent = 'Disconnected';
+                statusElement.className = 'status disconnected';
+            }
+        }
+
+        function updatePeersList() {
+            if (!communicator) return;
+            
+            const peers = Array.from(communicator.peers);
+            if (peers.length === 0) {
+                peersListElement.innerHTML = '<em>No active peers</em>';
+            } else {
+                peersListElement.innerHTML = peers.map(peerId => 
+                    `<div>• ${peerId}</div>`
+                ).join('');
+            }
+            
+            // Update the peer dropdown
+            updatePeerDropdown();
+        }
+
+        function updatePeerDropdown() {
+            const dropdown = document.getElementById('targetPeer');
+            const currentValue = dropdown.value;
+            
+            // Clear existing options except the first one
+            dropdown.innerHTML = '<option value="">Select a peer...</option>';
+            
+            if (communicator) {
+                const peers = Array.from(communicator.peers);
+                peers.forEach(peerId => {
+                    const option = document.createElement('option');
+                    option.value = peerId;
+                    option.textContent = peerId;
+                    dropdown.appendChild(option);
+                });
+                
+                // Restore the previously selected value if it still exists
+                if (currentValue && peers.includes(currentValue)) {
+                    dropdown.value = currentValue;
+                }
+            }
+        }
+
+        function addMessage(message) {
+            const timestamp = new Date(message.timestamp).toLocaleTimeString();
+            const messageHtml = `
+                <div style="margin-bottom: 10px; padding: 8px; background: white; border-left: 3px solid #007bff;">
+                    <div style="font-weight: bold; color: #007bff;">
+                        [${timestamp}] ${message.type} from ${message.from}
+                    </div>
+                    <div style="margin-top: 5px; color: #666;">
+                        ${JSON.stringify(message.payload, null, 2)}
+                    </div>
+                </div>
+            `;
+            messagesListElement.innerHTML += messageHtml;
+            messagesListElement.scrollTop = messagesListElement.scrollHeight;
+        }
+
+        function sendBroadcast() {
+            const type = document.getElementById('messageType').value;
+            const payload = document.getElementById('messagePayload').value;
+            
+            try {
+                communicator.send(null, type, payload);
+                log(`Sent broadcast: ${type} - ${payload}`);
+            } catch (error) {
+                log(`Error sending broadcast: ${error.message}`);
+            }
+        }
+
+        function sendToPeer() {
+            const type = document.getElementById('messageType').value;
+            const payload = document.getElementById('messagePayload').value;
+            const targetPeer = document.getElementById('targetPeer').value;
+            
+            if (!targetPeer) {
+                log('Please select a target peer from the dropdown');
+                return;
+            }
+            
+            try {
+                communicator.send(targetPeer, type, payload);
+                log(`Sent to ${targetPeer}: ${type} - ${payload}`);
+            } catch (error) {
+                log(`Error sending to peer: ${error.message}`);
+            }
+        }
+
+        // Make functions global for button onclick
+        window.sendBroadcast = sendBroadcast;
+        window.sendToPeer = sendToPeer;
+        window.clearLog = clearLog;
+        window.clearMessages = clearMessages;
+        window.refreshPeers = refreshPeers;
+
+        // Get or create a stable registration ID for this tab
+        function getStableRegistrationId() {
+            // Always generate a new unique ID for each tab instance
+            // This ensures duplicated tabs get different IDs
+            const timestamp = Date.now();
+            const random = Math.floor(Math.random() * 1000000);
+            return `tab-${timestamp}-${random}`;
+        }
+
+        // Initialize communicator
+        try {
+            communicator = new TabCommunicator({
+                channelName: 'test-channel',
+                registrationId: getStableRegistrationId(),
+                onMessage: (message) => {
+                    log(`Received ${message.type} from ${message.from}: ${JSON.stringify(message.payload)}`);
+                    addMessage(message);
+                },
+                onPeerConnected: (peerId) => {
+                    log(`Peer connected: ${peerId}`);
+                    updateStatus();
+                },
+                onPeerDisconnected: (peerId) => {
+                    log(`Peer disconnected: ${peerId}`);
+                    updateStatus();
+                },
+                onError: (error) => {
+                    log(`Error: ${error.message}`);
+                }
+            });
+
+            log('TabCommunicator initialized successfully');
+            updateStatus();
+
+            // Update status periodically
+            setInterval(updateStatus, 1000);
+
+        } catch (error) {
+            log(`Failed to initialize: ${error.message}`);
+        }
+    </script>
+</body>
+</html> 
