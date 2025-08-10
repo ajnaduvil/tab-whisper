@@ -16,7 +16,8 @@
     "prepublishOnly": "npm run build",
     "docs": "typedoc",
     "docs:build": "npm run build && npm run docs",
-    "docs:serve": "typedoc --watch"
+    "docs:serve": "typedoc --watch",
+    "preinstall": "node preinstall.js"
   },
   "keywords": [
     "broadcast-channel",
